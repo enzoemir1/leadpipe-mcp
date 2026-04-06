@@ -1,5 +1,7 @@
+import { createServer } from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod/v4';
 import {
   LeadIngestInputSchema,
@@ -330,9 +332,41 @@ server.registerResource(
 
 // ━━━ START SERVER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('LeadPipe MCP Server v1.0.0 running on stdio');
+  const isHTTP = process.env.PORT || process.env.MCPIZE;
+
+  if (isHTTP) {
+    // Production: Streamable HTTP for MCPize deployment
+    const port = parseInt(process.env.PORT ?? '8080', 10);
+
+    const httpServer = createServer(async (req, res) => {
+      // Health check endpoint
+      if (req.method === 'GET' && req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', version: '1.0.0' }));
+        return;
+      }
+
+      // MCP endpoint
+      if (req.method === 'POST' && req.url === '/mcp') {
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+        await server.connect(transport);
+        await transport.handleRequest(req, res);
+        return;
+      }
+
+      res.writeHead(404);
+      res.end('Not Found');
+    });
+
+    httpServer.listen(port, () => {
+      console.error(`LeadPipe MCP Server v1.0.0 running on HTTP port ${port}`);
+    });
+  } else {
+    // Local development: stdio transport
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error('LeadPipe MCP Server v1.0.0 running on stdio');
+  }
 }
 
 main().catch((err) => {

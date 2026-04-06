@@ -11,6 +11,9 @@ build:
 startCommand:
   type: http
   command: node dist/index.js
+  env:
+    MCPIZE: "true"
+    PORT: "8080"
 
 secrets:
   - name: HUNTER_API_KEY
