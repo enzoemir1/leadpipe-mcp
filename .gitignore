@@ -6,3 +6,4 @@ data-test-scoring/
 .env
 *.log
 .DS_Store
+.mcpize/

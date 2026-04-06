@@ -337,19 +337,27 @@ async function main() {
   if (isHTTP) {
     // Production: Streamable HTTP for MCPize deployment
     const port = parseInt(process.env.PORT ?? '8080', 10);
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
     const httpServer = createServer(async (req, res) => {
-      // Health check endpoint
       if (req.method === 'GET' && req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', version: '1.0.0' }));
         return;
       }
 
-      // MCP endpoint
       if ((req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') && req.url === '/mcp') {
-        await transport.handleRequest(req, res);
+        try {
+          const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+          try { await server.close(); } catch { /* not connected yet */ }
+          await server.connect(transport);
+          await transport.handleRequest(req, res);
+        } catch (err) {
+          console.error('[LeadPipe MCP] Request error:', err);
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Internal server error' }));
+          }
+        }
         return;
       }
 
@@ -357,7 +365,6 @@ async function main() {
       res.end('Not Found');
     });
 
-    await server.connect(transport);
     httpServer.listen(port, () => {
       console.error(`LeadPipe MCP Server v1.0.0 running on HTTP port ${port}`);
     });
