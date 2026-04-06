@@ -1,0 +1,29 @@
+version: 1
+name: leadpipe-mcp
+description: "AI-powered lead qualification engine. Ingest leads, auto-enrich with company data, score 0-100 with configurable AI rules, and export to HubSpot/Pipedrive/Sheets."
+runtime: typescript
+entry: src/index.ts
+
+build:
+  install: npm ci
+  command: npm run build
+
+startCommand:
+  type: http
+  command: node dist/index.js
+
+secrets:
+  - name: HUNTER_API_KEY
+    required: false
+    description: "Hunter.io API key for email/company enrichment (optional, free tier available)"
+
+credentials:
+  - name: HUBSPOT_API_KEY
+    required: false
+    description: "Your HubSpot private app access token for CRM sync"
+  - name: PIPEDRIVE_API_KEY
+    required: false
+    description: "Your Pipedrive API token for CRM sync"
+  - name: GOOGLE_SHEETS_CREDENTIALS
+    required: false
+    description: "Google Sheets service account JSON for spreadsheet export"

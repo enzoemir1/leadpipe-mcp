@@ -1,0 +1,258 @@
+# LeadPipe MCP
+
+**AI-powered lead qualification engine for the Model Context Protocol**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://www.typescriptlang.org/)
+[![MCP](https://img.shields.io/badge/MCP-1.29-2A9D8F.svg)](https://modelcontextprotocol.io/)
+
+LeadPipe ingests leads from any source, enriches them with company data, scores them 0-100 using configurable AI rules, and exports qualified leads to your CRM — all through the MCP protocol.
+
+---
+
+## Features
+
+- **Lead ingestion** from webhooks, forms, APIs, or CSV — single or batch (up to 100)
+- **Auto-enrichment** with company data: industry, size, country, tech stack (via Hunter.io or domain heuristics)
+- **AI scoring engine** (0-100) with 6 weighted dimensions + custom rules
+- **CRM export** to HubSpot, Pipedrive, Google Sheets, CSV, or JSON
+- **Pipeline analytics** with real-time stats, score distribution, conversion rates
+- **Configurable** scoring weights, high-value titles/industries, custom rules
+- **8 MCP tools** + **3 MCP resources** covering the full lead lifecycle
+
+---
+
+## Quick Start
+
+### Install from MCPize Marketplace
+
+1. Search for **LeadPipe MCP** on [mcpize.com](https://mcpize.com)
+2. Click **Install** and select your subscription tier
+3. Tools and resources are automatically available in any MCP-compatible client (Cursor, VS Code, etc.)
+
+### Build from Source
+
+```bash
+git clone https://github.com/enzoemir1/leadpipe-mcp.git
+cd leadpipe-mcp
+npm ci
+npm run build
+```
+
+Add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "leadpipe": {
+      "command": "node",
+      "args": ["path/to/leadpipe-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+---
+
+## Tools
+
+### lead_ingest
+
+Add a single lead to the pipeline.
+
+```json
+{
+  "email": "jane@acme.com",
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "job_title": "VP of Engineering",
+  "company_name": "Acme Corp",
+  "company_domain": "acme.com",
+  "source": "website_form",
+  "tags": ["demo-request"]
+}
+```
+
+### lead_batch_ingest
+
+Add 1-100 leads at once. Duplicates are automatically skipped.
+
+```json
+{
+  "leads": [
+    { "email": "lead1@corp.com", "job_title": "CEO" },
+    { "email": "lead2@startup.io", "job_title": "CTO" }
+  ]
+}
+```
+
+### lead_enrich
+
+Enrich a lead with company data using the email domain.
+
+```json
+{ "lead_id": "uuid-of-lead" }
+```
+
+Returns: company name, industry, size, country, tech stack, LinkedIn URL.
+
+### lead_score
+
+Calculate a qualification score (0-100). Leads scoring 60+ are marked **qualified**.
+
+```json
+{ "lead_id": "uuid-of-lead" }
+```
+
+Returns score + detailed breakdown across all 6 dimensions.
+
+### lead_search
+
+Search and filter leads with pagination.
+
+```json
+{
+  "query": "acme",
+  "status": "qualified",
+  "min_score": 60,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+### lead_export
+
+Export leads to CRM or file format.
+
+```json
+{
+  "target": "hubspot",
+  "min_score": 60
+}
+```
+
+Targets: `hubspot`, `pipedrive`, `google_sheets`, `csv`, `json`
+
+### pipeline_stats
+
+Get pipeline analytics. No input required.
+
+Returns: total leads, status/source breakdown, average score, score distribution, qualified rate, leads today/week/month.
+
+### config_scoring
+
+View or update scoring configuration.
+
+```json
+{
+  "job_title_weight": 0.30,
+  "high_value_titles": ["ceo", "cto", "vp", "founder"],
+  "custom_rules": [
+    {
+      "field": "company_industry",
+      "operator": "equals",
+      "value": "fintech",
+      "points": 15,
+      "description": "Bonus for fintech companies"
+    }
+  ]
+}
+```
+
+---
+
+## Resources
+
+| Resource | Description |
+|----------|-------------|
+| `leads://recent` | The 50 most recently added leads |
+| `leads://pipeline` | Pipeline summary with status counts, scores, conversion rates |
+| `leads://config` | Current scoring engine configuration |
+
+---
+
+## Scoring Engine
+
+Leads are scored 0-100 using a weighted average of 6 dimensions:
+
+| Dimension | Default Weight | How It Works |
+|-----------|---------------|--------------|
+| Job Title | 25% | C-level/Founder: 100, VP/Director: 85, Manager: 65, Senior: 50, Junior: 15 |
+| Company Size | 20% | Preferred sizes (11-50, 51-200, 201-500): 90, others scaled accordingly |
+| Industry | 20% | High-value industries (SaaS, fintech, etc.): 90, others: 40 |
+| Engagement | 15% | Phone provided, full name, tags, source type (landing page > CSV) |
+| Recency | 10% | Today: 100, last week: 75, last month: 35, 3+ months: 5 |
+| Custom Rules | 10% | User-defined rules with -50 to +50 points each |
+
+**Formula:** `score = sum(dimension_score * weight)`
+
+Leads with score >= 60 are **qualified**. Below 60 are **disqualified**.
+
+---
+
+## CRM Integration
+
+### HubSpot
+
+Set the `HUBSPOT_API_KEY` environment variable with your HubSpot private app access token.
+
+```bash
+export HUBSPOT_API_KEY="pat-xxx-xxx"
+```
+
+### Pipedrive
+
+Set the `PIPEDRIVE_API_KEY` environment variable.
+
+```bash
+export PIPEDRIVE_API_KEY="xxx"
+```
+
+### Google Sheets
+
+Set `GOOGLE_SHEETS_CREDENTIALS` with your service account JSON.
+
+### CSV / JSON
+
+No configuration needed. Export returns data directly.
+
+---
+
+## Enrichment
+
+LeadPipe extracts the domain from the lead's email and looks up company data:
+
+1. **Hunter.io** (if `HUNTER_API_KEY` is set) — returns organization, industry, country, tech stack
+2. **Domain heuristics** — maps known domains to company data
+3. **Freemail detection** — gmail.com, yahoo.com, etc. are flagged (no company enrichment)
+
+---
+
+## Pricing
+
+| Tier | Price | Leads/month | Features |
+|------|-------|-------------|----------|
+| Free | $0 | 50 | Basic scoring, webhook intake |
+| Pro | $20/mo | 500 | AI scoring, enrichment, email notifications |
+| Business | $40/mo | 5,000 | CRM sync, pipeline analytics, custom rules |
+
+Available on the [MCPize Marketplace](https://mcpize.com).
+
+---
+
+## Development
+
+```bash
+npm run dev        # Hot reload development
+npm run build      # Production build
+npm test           # Run unit tests
+npm run inspect    # Open MCP Inspector
+```
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
+
+Built by [Automatia BCN](https://github.com/enzoemir1).
