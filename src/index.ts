@@ -337,6 +337,7 @@ async function main() {
   if (isHTTP) {
     // Production: Streamable HTTP for MCPize deployment
     const port = parseInt(process.env.PORT ?? '8080', 10);
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
     const httpServer = createServer(async (req, res) => {
       // Health check endpoint
@@ -347,9 +348,7 @@ async function main() {
       }
 
       // MCP endpoint
-      if (req.method === 'POST' && req.url === '/mcp') {
-        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-        await server.connect(transport);
+      if ((req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') && req.url === '/mcp') {
         await transport.handleRequest(req, res);
         return;
       }
@@ -358,6 +357,7 @@ async function main() {
       res.end('Not Found');
     });
 
+    await server.connect(transport);
     httpServer.listen(port, () => {
       console.error(`LeadPipe MCP Server v1.0.0 running on HTTP port ${port}`);
     });
