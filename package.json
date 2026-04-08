@@ -1,7 +1,12 @@
 {
-  "name": "leadpipe-mcp",
+  "name": "leadpipe-mcp-server",
   "version": "1.0.0",
+  "mcpName": "io.github.enzoemir1/leadpipe-mcp",
   "description": "AI-powered lead qualification engine for MCP. Ingest, enrich, score, and export leads to your CRM.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enzoemir1/leadpipe-mcp.git"
+  },
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
