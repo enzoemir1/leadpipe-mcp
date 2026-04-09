@@ -1,0 +1,21 @@
+{
+  "name": "leadpipe-mcp",
+  "displayName": "LeadPipe MCP",
+  "description": "AI lead qualification engine with 6-dimension scoring, company enrichment via Hunter.io, and CRM export to HubSpot/Pipedrive. 8 tools, 3 resources.",
+  "version": "1.1.0",
+  "tools": [
+    { "name": "lead_ingest", "description": "Add a single lead" },
+    { "name": "lead_batch_ingest", "description": "Batch import up to 100 leads" },
+    { "name": "lead_enrich", "description": "Enrich lead with company data" },
+    { "name": "lead_score", "description": "AI qualification score (0-100)" },
+    { "name": "lead_search", "description": "Search and filter leads" },
+    { "name": "lead_export", "description": "Export to HubSpot, Pipedrive, CSV, JSON" },
+    { "name": "pipeline_stats", "description": "Pipeline analytics dashboard" },
+    { "name": "config_scoring", "description": "Configure scoring weights and rules" }
+  ],
+  "resources": [
+    { "uri": "leads://recent", "description": "50 most recent leads" },
+    { "uri": "leads://pipeline", "description": "Pipeline summary" },
+    { "uri": "leads://config", "description": "Scoring configuration" }
+  ]
+}
