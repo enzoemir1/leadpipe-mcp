@@ -1,5 +1,5 @@
 import type { Lead, CompanyInfo } from '../models/lead.js';
-import { storage } from './storage.js';
+import { storage as defaultStorage, Storage } from './storage.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -93,10 +93,11 @@ function estimateCompanySize(domain: string): CompanyInfo['size'] {
   return undefined;
 }
 
-export async function enrichLead(leadId: string): Promise<Lead> {
+export async function enrichLead(leadId: string, store?: Storage): Promise<Lead> {
   if (!RE_UUID.test(leadId)) throw new ValidationError(`Invalid lead ID format: ${leadId}`);
 
-  const lead = await storage.getLeadById(leadId);
+  const s = store ?? defaultStorage;
+  const lead = await s.getLeadById(leadId);
   if (!lead) throw new NotFoundError('Lead', leadId);
 
   const domain = extractDomain(lead.email);
@@ -126,7 +127,7 @@ export async function enrichLead(leadId: string): Promise<Lead> {
     ),
   };
 
-  const updated = await storage.updateLead(leadId, {
+  const updated = await s.updateLead(leadId, {
     company: merged,
     status: lead.status === 'new' ? 'enriched' : lead.status,
     enriched_at: new Date().toISOString(),

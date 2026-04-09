@@ -1,5 +1,5 @@
 import type { Lead, ScoreBreakdown, ScoringConfig, ScoringDetail, CustomRule } from '../models/lead.js';
-import { storage } from './storage.js';
+import { storage as defaultStorage, Storage } from './storage.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 // Pre-compiled regex patterns for job title scoring (avoids repeated compilation)
@@ -256,13 +256,14 @@ function evaluateCondition(value: string, operator: string, target: string): boo
   }
 }
 
-export async function scoreLead(leadId: string): Promise<Lead> {
+export async function scoreLead(leadId: string, store?: Storage): Promise<Lead> {
   if (!RE_UUID.test(leadId)) throw new ValidationError(`Invalid lead ID format: ${leadId}`);
 
-  const lead = await storage.getLeadById(leadId);
+  const s = store ?? defaultStorage;
+  const lead = await s.getLeadById(leadId);
   if (!lead) throw new NotFoundError('Lead', leadId);
 
-  const config = await storage.getScoringConfig();
+  const config = await s.getScoringConfig();
 
   const titleResult = scoreJobTitle(lead.job_title, config);
   const sizeResult = scoreCompanySize(lead.company?.size, config);
@@ -301,7 +302,7 @@ export async function scoreLead(leadId: string): Promise<Lead> {
 
   const status = total >= 60 ? 'qualified' : 'disqualified';
 
-  const updated = await storage.updateLead(leadId, {
+  const updated = await s.updateLead(leadId, {
     score: total,
     score_breakdown: breakdown,
     status,

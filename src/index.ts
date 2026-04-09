@@ -31,6 +31,7 @@ server.registerTool(
     description:
       'Add a new lead to the pipeline. Provide email (required) and optional fields like name, job title, company. Duplicate emails are rejected.',
     inputSchema: LeadIngestInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async (input) => {
     try {
@@ -58,6 +59,7 @@ server.registerTool(
     description:
       'Add multiple leads at once (1-100). Returns count of ingested and skipped (duplicates).',
     inputSchema: LeadBatchIngestInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async (input) => {
     try {
@@ -150,6 +152,7 @@ server.registerTool(
     description:
       'Search and filter leads by text query, status, score range, source, or tags. Supports pagination.',
     inputSchema: LeadSearchInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async (input) => {
     try {
@@ -174,6 +177,7 @@ server.registerTool(
     description:
       'Export leads to HubSpot, Pipedrive, Google Sheets, CSV, or JSON. Optionally filter by lead IDs or minimum score.',
     inputSchema: LeadExportInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async (input) => {
     try {
@@ -196,6 +200,7 @@ server.registerTool(
     description:
       'Get lead pipeline analytics: total leads, status/source breakdown, average score, score distribution, conversion rates.',
     inputSchema: z.object({}),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async () => {
     try {
@@ -328,6 +333,41 @@ server.registerResource(
       ],
     };
   }
+);
+
+// ━━━ PROMPTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+server.registerPrompt(
+  'lead_qualification',
+  { title: 'Lead Qualification Review', description: 'Guide through reviewing and qualifying a batch of new leads. Helps prioritize which leads to focus on based on scoring and enrichment data.' },
+  async () => ({
+    messages: [{
+      role: 'assistant' as const,
+      content: { type: 'text' as const, text: 'I\'ll help you review and qualify your leads. Let me start by checking your pipeline.\n\n1. First, I\'ll use `lead_search` to find unscored leads\n2. Then `lead_score` each one to get AI qualification scores\n3. Finally, I\'ll summarize the top prospects for your review\n\nWould you like me to start with all new leads, or filter by a specific source or tag?' },
+    }],
+  }),
+);
+
+server.registerPrompt(
+  'pipeline_review',
+  { title: 'Pipeline Health Review', description: 'Comprehensive review of your lead pipeline health — conversion rates, score distribution, source effectiveness, and actionable recommendations.' },
+  async () => ({
+    messages: [{
+      role: 'assistant' as const,
+      content: { type: 'text' as const, text: 'Let me run a complete pipeline health check.\n\n1. I\'ll use `pipeline_stats` to get current metrics\n2. Review score distribution and conversion rates\n3. Identify your best-performing lead sources\n4. Provide recommendations to improve qualification rates\n\nShall I proceed with the full analysis?' },
+    }],
+  }),
+);
+
+server.registerPrompt(
+  'crm_export',
+  { title: 'CRM Export Workflow', description: 'Guide through exporting qualified leads to your CRM — select criteria, choose target, and execute the export.' },
+  async () => ({
+    messages: [{
+      role: 'assistant' as const,
+      content: { type: 'text' as const, text: 'I\'ll help you export leads to your CRM.\n\n1. First, let\'s define criteria — minimum score, status, or tags\n2. I\'ll preview the leads that match\n3. Choose your target: HubSpot, Pipedrive, CSV, or JSON\n4. Execute the export\n\nWhich CRM would you like to export to?' },
+    }],
+  }),
 );
 
 // ━━━ SMITHERY SANDBOX ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
