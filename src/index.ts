@@ -330,6 +330,13 @@ server.registerResource(
   }
 );
 
+// ━━━ SMITHERY SANDBOX ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let _sandboxMode = false;
+export function createSandboxServer() {
+  _sandboxMode = true;
+  return server;
+}
+
 // ━━━ START SERVER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function main() {
   const isHTTP = process.env.PORT || process.env.MCPIZE;
@@ -376,7 +383,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+setTimeout(() => {
+  if (!_sandboxMode) {
+    main().catch((err) => {
+      console.error('Fatal error:', err);
+      process.exit(1);
+    });
+  }
+}, 0);

@@ -15,7 +15,7 @@ LeadPipe ingests leads from any source, enriches them with company data, scores 
 - **Lead ingestion** from webhooks, forms, APIs, or CSV — single or batch (up to 100)
 - **Auto-enrichment** with company data: industry, size, country, tech stack (via Hunter.io or domain heuristics)
 - **AI scoring engine** (0-100) with 6 weighted dimensions + custom rules
-- **CRM export** to HubSpot, Pipedrive, Google Sheets, CSV, or JSON
+- **CRM export** to HubSpot, Pipedrive, CSV, or JSON
 - **Pipeline analytics** with real-time stats, score distribution, conversion rates
 - **Configurable** scoring weights, high-value titles/industries, custom rules
 - **8 MCP tools** + **3 MCP resources** covering the full lead lifecycle
@@ -131,7 +131,9 @@ Export leads to CRM or file format.
 }
 ```
 
-Targets: `hubspot`, `pipedrive`, `google_sheets`, `csv`, `json`
+Targets: `hubspot`, `pipedrive`, `csv`, `json`
+
+> Google Sheets export is on the roadmap. Currently returns Sheets-ready formatted data.
 
 ### pipeline_stats
 
@@ -207,10 +209,6 @@ Set the `PIPEDRIVE_API_KEY` environment variable.
 ```bash
 export PIPEDRIVE_API_KEY="xxx"
 ```
-
-### Google Sheets
-
-Set `GOOGLE_SHEETS_CREDENTIALS` with your service account JSON.
 
 ### CSV / JSON
 

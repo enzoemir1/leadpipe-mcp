@@ -1,0 +1,467 @@
+{
+  "payload": {
+    "type": "hosted",
+    "stateful": false,
+    "hasAuthAdapter": false,
+    "serverCard": {
+      "serverInfo": {
+        "name": "leadpipe-mcp",
+        "version": "1.0.0"
+      },
+      "tools": [
+        {
+          "name": "lead_ingest",
+          "title": "Ingest Lead",
+          "description": "Add a new lead to the pipeline. Provide email (required) and optional fields like name, job title, company. Duplicate emails are rejected.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email",
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              "first_name": {
+                "type": "string"
+              },
+              "last_name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "job_title": {
+                "type": "string"
+              },
+              "company_name": {
+                "type": "string"
+              },
+              "company_domain": {
+                "type": "string"
+              },
+              "source": {
+                "default": "api",
+                "type": "string",
+                "enum": [
+                  "website_form",
+                  "landing_page",
+                  "api",
+                  "csv_import",
+                  "manual",
+                  "webhook"
+                ]
+              },
+              "source_detail": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "custom_fields": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "email"
+            ],
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "lead_batch_ingest",
+          "title": "Batch Ingest Leads",
+          "description": "Add multiple leads at once (1-100). Returns count of ingested and skipped (duplicates).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "leads": {
+                "minItems": 1,
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    },
+                    "first_name": {
+                      "type": "string"
+                    },
+                    "last_name": {
+                      "type": "string"
+                    },
+                    "phone": {
+                      "type": "string"
+                    },
+                    "job_title": {
+                      "type": "string"
+                    },
+                    "company_name": {
+                      "type": "string"
+                    },
+                    "company_domain": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "default": "api",
+                      "type": "string",
+                      "enum": [
+                        "website_form",
+                        "landing_page",
+                        "api",
+                        "csv_import",
+                        "manual",
+                        "webhook"
+                      ]
+                    },
+                    "source_detail": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "custom_fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "email"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "leads"
+            ],
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "lead_enrich",
+          "title": "Enrich Lead",
+          "description": "Enrich a lead with company data (industry, size, country, tech stack) using the email domain. Provide the lead ID.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "lead_id": {
+                "type": "string",
+                "description": "The lead ID to enrich"
+              }
+            },
+            "required": [
+              "lead_id"
+            ],
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "lead_score",
+          "title": "Score Lead",
+          "description": "Calculate an AI-powered qualification score (0-100) for a lead based on job title, company size, industry, and custom rules. Updates the lead status to qualified (>=60) or disqualified (<60).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "lead_id": {
+                "type": "string",
+                "description": "The lead ID to score"
+              }
+            },
+            "required": [
+              "lead_id"
+            ],
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "lead_search",
+          "title": "Search Leads",
+          "description": "Search and filter leads by text query, status, score range, source, or tags. Supports pagination.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "new",
+                  "enriched",
+                  "scored",
+                  "qualified",
+                  "disqualified",
+                  "exported",
+                  "archived"
+                ]
+              },
+              "min_score": {
+                "type": "number"
+              },
+              "max_score": {
+                "type": "number"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "website_form",
+                  "landing_page",
+                  "api",
+                  "csv_import",
+                  "manual",
+                  "webhook"
+                ]
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "limit": {
+                "default": 20,
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "offset": {
+                "default": 0,
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "lead_export",
+          "title": "Export Leads",
+          "description": "Export leads to HubSpot, Pipedrive, Google Sheets, CSV, or JSON. Optionally filter by lead IDs or minimum score.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "lead_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "target": {
+                "type": "string",
+                "enum": [
+                  "hubspot",
+                  "pipedrive",
+                  "google_sheets",
+                  "csv",
+                  "json"
+                ]
+              },
+              "min_score": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "target"
+            ],
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "pipeline_stats",
+          "title": "Pipeline Statistics",
+          "description": "Get lead pipeline analytics: total leads, status/source breakdown, average score, score distribution, conversion rates.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "config_scoring",
+          "title": "Scoring Configuration",
+          "description": "View or update the lead scoring configuration. Pass empty object to view current config. Pass fields to update weights, titles, industries, or custom rules.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "job_title_weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "company_size_weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "industry_weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "engagement_weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "recency_weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "custom_rules_weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "high_value_titles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "high_value_industries": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "preferred_company_sizes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "1-10",
+                    "11-50",
+                    "51-200",
+                    "201-500",
+                    "501-1000",
+                    "1001-5000",
+                    "5000+"
+                  ]
+                }
+              },
+              "custom_rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "operator": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "contains",
+                        "starts_with",
+                        "ends_with",
+                        "gt",
+                        "lt",
+                        "regex"
+                      ]
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "points": {
+                      "type": "number",
+                      "minimum": -50,
+                      "maximum": 50
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "operator",
+                    "value",
+                    "points",
+                    "description"
+                  ]
+                }
+              }
+            },
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        }
+      ],
+      "resources": [
+        {
+          "name": "recent-leads",
+          "title": "Recent Leads",
+          "uri": "leads://recent",
+          "description": "The 50 most recently added leads",
+          "mimeType": "application/json"
+        },
+        {
+          "name": "pipeline-overview",
+          "title": "Pipeline Overview",
+          "uri": "leads://pipeline",
+          "description": "Active pipeline summary with lead counts by status",
+          "mimeType": "application/json"
+        },
+        {
+          "name": "scoring-config",
+          "title": "Scoring Configuration",
+          "uri": "leads://config",
+          "description": "Current scoring engine configuration",
+          "mimeType": "application/json"
+        }
+      ],
+      "prompts": []
+    },
+    "source": {
+      "commit": "923b733cbd67c81b533209b3e8bf271217a31a08",
+      "branch": "main"
+    }
+  },
+  "artifacts": {
+    "module": "module.js",
+    "sourcemap": "module.js.map"
+  }
+}
