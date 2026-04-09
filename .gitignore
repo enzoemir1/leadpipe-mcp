@@ -7,3 +7,5 @@ data-test-scoring/
 *.log
 .DS_Store
 .mcpize/
+
+.mcpregistry_*
