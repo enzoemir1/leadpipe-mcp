@@ -18,9 +18,11 @@ import { exportLeads } from './services/crm/exporter.js';
 import { storage } from './services/storage.js';
 import { handleToolError } from './utils/errors.js';
 
+const SERVER_VERSION = '1.2.1';
+
 const server = new McpServer({
   name: 'leadpipe-mcp',
-  version: '1.0.0',
+  version: SERVER_VERSION,
 });
 
 // ━━━ TOOL: lead_ingest ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -29,7 +31,7 @@ server.registerTool(
   {
     title: 'Ingest Lead',
     description:
-      'Add a new lead to the pipeline. Provide email (required) and optional fields like name, job title, company. Duplicate emails are rejected.',
+      'Add a single lead to the pipeline. Required: email. Optional: first_name, last_name, job_title, company_name, phone, source ("website"|"linkedin"|"referral"|"event"|"cold_outreach"|"partner"|"other"), tags (string array), custom_fields. Returns the stored lead object with a generated UUID, initial status="new", created_at, and a null score (run lead_score to populate). Throws a duplicate error if the email is already in the pipeline — use lead_search first if you need upsert behaviour.',
     inputSchema: LeadIngestInputSchema,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
@@ -57,7 +59,7 @@ server.registerTool(
   {
     title: 'Batch Ingest Leads',
     description:
-      'Add multiple leads at once (1-100). Returns count of ingested and skipped (duplicates).',
+      'Add 1 to 100 leads in a single call. Each lead uses the same schema as lead_ingest. Returns {ingested: Lead[], skipped: Array<{email, reason}>} — duplicates are skipped (not failed) so a partial batch still succeeds. Prefer this over repeated lead_ingest calls for bulk imports (CSV/webhook drops).',
     inputSchema: LeadBatchIngestInputSchema,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
@@ -81,10 +83,11 @@ server.registerTool(
   {
     title: 'Enrich Lead',
     description:
-      'Enrich a lead with company data (industry, size, country, tech stack) using the email domain. Provide the lead ID.',
+      'Derive and attach company data to an existing lead using the email domain: company name, industry, size, country, website, estimated headcount, and common tech stack. Does not call external APIs — enrichment is driven by the built-in domain knowledge base. Updates the lead in place and returns the enriched record, ready for lead_score. Run this before lead_score for the best qualification accuracy.',
     inputSchema: z.object({
-      lead_id: z.string().describe('The lead ID to enrich'),
+      lead_id: z.string().uuid().describe('UUID of the lead to enrich (returned by lead_ingest or lead_search)'),
     }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async ({ lead_id }) => {
     try {
@@ -110,10 +113,11 @@ server.registerTool(
   {
     title: 'Score Lead',
     description:
-      'Calculate an AI-powered qualification score (0-100) for a lead based on job title, company size, industry, and custom rules. Updates the lead status to qualified (>=60) or disqualified (<60).',
+      'Compute a 6-dimensional qualification score (0-100) for a lead: job_title, company_size, industry, engagement, recency, and custom_rules. Each dimension is weighted via config_scoring; the final score is their weighted average. Updates the lead status to "qualified" (≥60) or "disqualified" (<60) and stores score_breakdown alongside the total. Returns the updated lead with the breakdown. Run lead_enrich first for the most accurate industry/size signals.',
     inputSchema: z.object({
-      lead_id: z.string().describe('The lead ID to score'),
+      lead_id: z.string().uuid().describe('UUID of the lead to score'),
     }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async ({ lead_id }) => {
     try {
@@ -150,7 +154,7 @@ server.registerTool(
   {
     title: 'Search Leads',
     description:
-      'Search and filter leads by text query, status, score range, source, or tags. Supports pagination.',
+      'Search and filter the lead pipeline. Optional filters: query (free-text over name/email/company), status ("new"|"qualified"|"disqualified"|"contacted"|"converted"), min_score, max_score, source, tags (array), date_from/date_to. Pagination via limit (default 50, max 200) and offset. Returns {total, leads[]}. Use this to drive exports, targeted scoring, and dashboards.',
     inputSchema: LeadSearchInputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
@@ -175,7 +179,7 @@ server.registerTool(
   {
     title: 'Export Leads',
     description:
-      'Export leads to HubSpot, Pipedrive, Google Sheets, CSV, or JSON. Optionally filter by lead IDs or minimum score.',
+      'Push leads to an external destination. target must be one of "hubspot", "pipedrive", "google_sheets", "csv", or "json". For CRM targets (hubspot, pipedrive) the respective API key env var must be set (HUBSPOT_API_KEY, PIPEDRIVE_API_TOKEN) — if missing, the tool returns a dry-run payload instead of erroring. Filter the export via lead_ids (explicit list) or min_score (everything above threshold). Returns {target, count, summary, errors?}.',
     inputSchema: LeadExportInputSchema,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
@@ -198,7 +202,7 @@ server.registerTool(
   {
     title: 'Pipeline Statistics',
     description:
-      'Get lead pipeline analytics: total leads, status/source breakdown, average score, score distribution, conversion rates.',
+      'Portfolio-wide pipeline analytics across all leads. Returns {total_leads, leads_today, leads_this_week, leads_this_month, avg_score, qualified_rate (percent), by_status (counts per status), by_source (counts per source), score_distribution}. Takes no input — always aggregates the full dataset. Ideal for dashboards, stand-ups, and conversion-rate tracking.',
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
@@ -231,7 +235,7 @@ server.registerTool(
   {
     title: 'Scoring Configuration',
     description:
-      'View or update the lead scoring configuration. Pass empty object to view current config. Pass fields to update weights, titles, industries, or custom rules.',
+      'View or update the global lead scoring configuration used by lead_score. Call with no fields (empty object) to fetch the current config. Pass any subset of fields to patch-update: six dimension weights (each 0–1, should sum to ~1 but not enforced), high_value_titles (string array), high_value_industries (string array), preferred_company_sizes, and custom_rules (array of {name, condition, points}). Changes apply to future lead_score calls only — previously scored leads keep their scores until re-scored.',
     inputSchema: z.object({
       job_title_weight: z.number().min(0).max(1).optional(),
       company_size_weight: z.number().min(0).max(1).optional(),
@@ -244,6 +248,7 @@ server.registerTool(
       preferred_company_sizes: z.array(CompanySizeSchema).optional(),
       custom_rules: z.array(CustomRuleSchema).optional(),
     }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async (input) => {
     try {
@@ -388,7 +393,7 @@ async function main() {
     const httpServer = createServer(async (req, res) => {
       if (req.method === 'GET' && req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', version: '1.0.0' }));
+        res.end(JSON.stringify({ status: 'ok', server: 'leadpipe-mcp', version: SERVER_VERSION }));
         return;
       }
 
@@ -413,13 +418,13 @@ async function main() {
     });
 
     httpServer.listen(port, () => {
-      console.error(`LeadPipe MCP Server v1.0.0 running on HTTP port ${port}`);
+      console.error(`LeadPipe MCP Server v${SERVER_VERSION} running on HTTP port ${port}`);
     });
   } else {
     // Local development: stdio transport
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error('LeadPipe MCP Server v1.0.0 running on stdio');
+    console.error(`LeadPipe MCP Server v${SERVER_VERSION} running on stdio`);
   }
 }
 
