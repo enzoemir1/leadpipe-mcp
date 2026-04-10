@@ -18,7 +18,7 @@ import { exportLeads } from './services/crm/exporter.js';
 import { storage } from './services/storage.js';
 import { handleToolError } from './utils/errors.js';
 
-const SERVER_VERSION = '1.2.1';
+const SERVER_VERSION = '1.2.2';
 
 const server = new McpServer({
   name: 'leadpipe-mcp',

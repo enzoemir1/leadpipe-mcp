@@ -59,4 +59,63 @@ describe('Lead Enrichment', () => {
   it('should throw for invalid UUID', async () => {
     await expect(enrichLead('not-a-uuid', store)).rejects.toThrow('Invalid');
   });
+
+  it('should preserve user-provided company_name casing', async () => {
+    const lead = makeLead('sarah@velocityai.io', {
+      company: { name: 'VelocityAI', domain: 'velocityai.io' },
+    });
+    await store.addLead(lead);
+    const enriched = await enrichLead(lead.id, store);
+    // User's exact casing must survive enrichment
+    expect(enriched.company?.name).toBe('VelocityAI');
+  });
+
+  it('should guess industry from .io TLD', async () => {
+    const lead = makeLead('founder@unknowncompany.io');
+    await store.addLead(lead);
+    const enriched = await enrichLead(lead.id, store);
+    expect(enriched.company?.industry).toBe('technology');
+  });
+
+  it('should guess industry from .ai TLD', async () => {
+    const lead = makeLead('vp@vectordb.ai');
+    await store.addLead(lead);
+    const enriched = await enrichLead(lead.id, store);
+    expect(enriched.company?.industry).toBe('technology');
+  });
+
+  it('should guess industry from name keyword (shop)', async () => {
+    const lead = makeLead('owner@mycoolshop.co');
+    await store.addLead(lead);
+    const enriched = await enrichLead(lead.id, store);
+    expect(enriched.company?.industry).toBe('ecommerce');
+  });
+
+  it('should default unknown domain size to mid-market', async () => {
+    const lead = makeLead('test@totallyunknownbrand.net');
+    await store.addLead(lead);
+    const enriched = await enrichLead(lead.id, store);
+    expect(enriched.company?.size).toBe('51-200');
+  });
+
+  it('should populate all CompanyInfo keys explicitly', async () => {
+    const lead = makeLead('test@example.co');
+    await store.addLead(lead);
+    const enriched = await enrichLead(lead.id, store);
+    // All schema fields should be present as keys (even if undefined)
+    const keys = Object.keys(enriched.company ?? {});
+    for (const k of ['name', 'domain', 'industry', 'size', 'country', 'description', 'linkedin_url', 'tech_stack']) {
+      expect(keys).toContain(k);
+    }
+  });
+
+  it('should not overwrite user-provided industry', async () => {
+    const lead = makeLead('dir@stripe.com', {
+      company: { name: 'Stripe Partner', domain: 'stripe.com', industry: 'consulting' },
+    });
+    await store.addLead(lead);
+    const enriched = await enrichLead(lead.id, store);
+    // User said "consulting" — enrichment should not overwrite to "fintech"
+    expect(enriched.company?.industry).toBe('consulting');
+  });
 });
