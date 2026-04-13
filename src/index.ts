@@ -15,15 +15,49 @@ import { ingestLead, ingestBatch } from './tools/ingest.js';
 import { enrichLead } from './services/enrichment.js';
 import { scoreLead } from './services/scoring-engine.js';
 import { exportLeads } from './services/crm/exporter.js';
+import { seedDemoLeads } from './services/demo-seed.js';
 import { storage } from './services/storage.js';
 import { handleToolError } from './utils/errors.js';
 
-const SERVER_VERSION = '1.2.2';
+const SERVER_VERSION = '1.3.0';
 
 const server = new McpServer({
   name: 'leadpipe-mcp',
   version: SERVER_VERSION,
 });
+
+// ━━━ TOOL: lead_demo_seed ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+server.registerTool(
+  'lead_demo_seed',
+  {
+    title: 'Seed Demo Leads',
+    description: 'Populate the pipeline with a realistic demo dataset: 14 leads across 5 archetypes (hot decision-makers, warm mid-level, cold junior/small-co, raw unenriched, and disqualified). Each lead has appropriate enrichment state, scoring breakdown, and status, so every downstream tool — lead_list, lead_search, lead_score, crm_export, and the pipeline-overview resource — returns meaningful output immediately. Use this to evaluate LeadPipe via MCP Inspector without Hunter, HubSpot, or Pipedrive API keys. Safe to call multiple times; each call appends a fresh batch with new UUIDs. Returns counts by status plus sample_lead_ids you can feed into lead_enrich, lead_score, or crm_export.',
+    inputSchema: z.object({}),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  async () => {
+    try {
+      const result = await seedDemoLeads();
+      const lines = [
+        `Seeded ${result.leads} demo leads:`,
+        `  Qualified: ${result.qualified}`,
+        `  Scored: ${result.scored}`,
+        `  New (unscored): ${result.new}`,
+        `  Disqualified: ${result.disqualified}`,
+        `  Avg score: ${result.avg_score ?? 'n/a'}`,
+        ``,
+        `Sample lead ids (use with lead_enrich, lead_score):`,
+        ...result.sample_lead_ids.map((id) => `  - ${id}`),
+      ];
+      return {
+        content: [{ type: 'text' as const, text: lines.join('\n') }],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    } catch (error) {
+      return handleToolError(error);
+    }
+  }
+);
 
 // ━━━ TOOL: lead_ingest ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 server.registerTool(
