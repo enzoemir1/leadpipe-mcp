@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.enzoemir1/leadpipe-mcp",
-  "description": "AI-powered lead qualification engine for MCP. Ingest, enrich, score, and export leads to your CRM.",
+  "description": "AI lead qualification: ICP filter, 0-100 scoring, Hunter.io enrichment, HubSpot/Pipedrive export.",
   "repository": {
     "url": "https://github.com/enzoemir1/leadpipe-mcp",
     "source": "github"
   },
-  "version": "1.3.0",
+  "version": "1.4.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "leadpipe-mcp-server",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "transport": {
         "type": "stdio"
       }
