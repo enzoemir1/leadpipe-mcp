@@ -1,0 +1,32 @@
+# Smithery manifest — LeadPipe MCP
+# Smithery auto-builds this repo via Dockerfile and hosts the container.
+# Users pass their own Hunter.io / HubSpot / Pipedrive API keys through the
+# MCP client config; nothing is stored server-side beyond the active session.
+
+runtime: "container"
+
+build:
+  dockerfile: "Dockerfile"
+  dockerBuildPath: "./"
+
+startCommand:
+  type: "http"
+
+configSchema:
+  type: object
+  additionalProperties: false
+  properties:
+    hunterApiKey:
+      type: string
+      title: Hunter.io API Key
+      description: "Optional. Enables real company enrichment during lead_enrich. Without it, domain heuristics + a curated industry map are used (works, but less coverage)."
+    hubspotApiKey:
+      type: string
+      title: HubSpot Private App Token
+      description: "Optional. Required only if you want to export leads to HubSpot via lead_export(target=hubspot). Format: pat-xxxx-xxxx."
+    pipedriveApiKey:
+      type: string
+      title: Pipedrive API Key
+      description: "Optional. Required only if you want to export leads to Pipedrive via lead_export(target=pipedrive)."
+
+exampleConfig: {}
