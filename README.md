@@ -16,9 +16,10 @@ LeadPipe ingests leads from any source, enriches them with company data, scores 
 - **Auto-enrichment** with company data: industry, size, country, tech stack (via Hunter.io or domain heuristics)
 - **AI scoring engine** (0-100) with 6 weighted dimensions + custom rules
 - **CRM export** to HubSpot, Pipedrive, CSV, or JSON
+- **ICP pre-qualification** to filter leads on freemail/title/country/tech-stack *before* spending a single enrichment credit
 - **Pipeline analytics** with real-time stats, score distribution, conversion rates
 - **Configurable** scoring weights, high-value titles/industries, custom rules
-- **8 MCP tools** + **3 MCP resources** covering the full lead lifecycle
+- **10 MCP tools** + **3 MCP resources** covering the full lead lifecycle
 
 ---
 
@@ -55,6 +56,27 @@ Add to your MCP client config:
 ---
 
 ## Tools
+
+### lead_qualify
+
+Filter leads against your Ideal Customer Profile **before** spending any enrichment credits. Uses only locally-available signals — email domain, job title, country, industry, company size, tech stack — so nothing is charged to Hunter.io, HubSpot, or Pipedrive.
+
+```json
+{
+  "criteria": {
+    "reject_freemail": true,
+    "required_title_keywords": ["vp", "director", "head", "founder"],
+    "target_countries": ["US", "CA", "GB"],
+    "min_company_size": "11-50",
+    "required_tech_stack": ["shopify"]
+  },
+  "auto_disqualify": true
+}
+```
+
+Returns per-lead qualified/rejected decisions with reasons and an estimated credit savings figure.
+
+> **Pairs well with platform detection tools.** If you chain a tool like [Detecto](https://github.com/) (`detect_platform`) *before* `lead_qualify`, the detected tech stack populates `company.tech_stack`, and `required_tech_stack` can drop wrong-platform leads before they ever reach enrichment or scoring.
 
 ### lead_ingest
 
@@ -230,9 +252,10 @@ LeadPipe extracts the domain from the lead's email and looks up company data:
 
 | Tier | Price | Leads/month | Features |
 |------|-------|-------------|----------|
-| Free | $0 | 50 | Basic scoring, webhook intake |
-| Pro | $20/mo | 500 | AI scoring, enrichment, email notifications |
-| Business | $40/mo | 5,000 | CRM sync, pipeline analytics, custom rules |
+| Free | $0 | 25 | Ingest, manual scoring, ICP pre-qualification |
+| Pro | $19/mo | 300 | AI scoring, Hunter.io enrichment, CRM export |
+| Business | $39/mo | 2,500 | Pipeline analytics, custom rules, priority support |
+| Agency | $99/mo | 10,000 | Multi-client, white-label exports |
 
 Available on the [MCPize Marketplace](https://mcpize.com).
 

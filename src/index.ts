@@ -16,10 +16,11 @@ import { enrichLead } from './services/enrichment.js';
 import { scoreLead } from './services/scoring-engine.js';
 import { exportLeads } from './services/crm/exporter.js';
 import { seedDemoLeads } from './services/demo-seed.js';
+import { qualifyLeads, type QualificationCriteria } from './services/qualify.js';
 import { storage } from './services/storage.js';
 import { handleToolError } from './utils/errors.js';
 
-const SERVER_VERSION = '1.3.0';
+const SERVER_VERSION = '1.4.0';
 
 const server = new McpServer({
   name: 'leadpipe-mcp',
@@ -52,6 +53,58 @@ server.registerTool(
       return {
         content: [{ type: 'text' as const, text: lines.join('\n') }],
         structuredContent: result as unknown as Record<string, unknown>,
+      };
+    } catch (error) {
+      return handleToolError(error);
+    }
+  }
+);
+
+// ━━━ TOOL: lead_qualify ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const QualificationCriteriaSchema = z.object({
+  reject_freemail: z.boolean().optional().describe('Reject gmail/yahoo/outlook/etc. — non-business emails.'),
+  required_title_keywords: z.array(z.string()).optional().describe('Case-insensitive substrings a lead\'s job_title must contain (any match passes). E.g. ["vp", "director", "head"].'),
+  exclude_title_keywords: z.array(z.string()).optional().describe('Case-insensitive substrings that disqualify if present in job_title.'),
+  target_countries: z.array(z.string()).optional().describe('ISO 3166-1 alpha-2 country codes to target. E.g. ["US", "CA", "GB"].'),
+  target_industries: z.array(z.string()).optional().describe('Industries the company must belong to (case-insensitive). E.g. ["saas", "fintech"].'),
+  min_company_size: z.enum(['1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5000+']).optional().describe('Reject leads below this company-size tier.'),
+  domain_allowlist: z.array(z.string()).optional().describe('Only accept these domains (full domain or suffix match). E.g. ["acme.com", "stripe.com"].'),
+  domain_blocklist: z.array(z.string()).optional().describe('Reject these domains. E.g. ["competitor.com"].'),
+  required_tech_stack: z.array(z.string()).optional().describe('Tech-stack tokens the company.tech_stack must include. Useful when chained after a platform-detection tool (e.g. Detecto). E.g. ["shopify", "stripe"].'),
+});
+
+server.registerTool(
+  'lead_qualify',
+  {
+    title: 'ICP Pre-Qualification (Pre-Enrichment Filter)',
+    description:
+      'Filter leads against your Ideal Customer Profile BEFORE spending enrichment credits. Uses only locally-available signals (email domain, job_title, country, industry hints, tech_stack) so nothing is charged to Hunter.io, HubSpot, Pipedrive, or any other external service. Set auto_disqualify=true to also update rejected leads to status="disqualified" with the reject reasons stored in custom_fields. If lead_ids is omitted, evaluates every lead currently in status="new". Pairs naturally with upstream platform-detection tools (e.g. Detecto\'s detect_platform) — run that first to populate company.tech_stack, then run lead_qualify with required_tech_stack=["shopify"] to drop wrong-platform leads before they cost a single API call. Returns qualified/rejected counts, per-lead reasons, and an estimated credit savings figure.',
+    inputSchema: z.object({
+      lead_ids: z.array(z.string().uuid()).optional().describe('Specific lead IDs to evaluate. If omitted, evaluates all leads with status="new".'),
+      criteria: QualificationCriteriaSchema.describe('At least one criterion is required. All provided criteria must pass for a lead to qualify.'),
+      auto_disqualify: z.boolean().default(false).describe('If true, rejected leads have status set to "disqualified" and reasons stored in custom_fields. If false (default), just returns the evaluation without mutating storage.'),
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ lead_ids, criteria, auto_disqualify }) => {
+    try {
+      const summary = await qualifyLeads({
+        lead_ids,
+        criteria: criteria as QualificationCriteria,
+        auto_disqualify,
+      });
+      const lines = [
+        `ICP qualification run:`,
+        `  Evaluated: ${summary.evaluated}`,
+        `  Qualified: ${summary.qualified}`,
+        `  Rejected:  ${summary.rejected}`,
+        `  Auto-disqualified in storage: ${summary.auto_disqualified}`,
+        ``,
+        `Cost savings: ${summary.cost_savings_estimate.note}`,
+      ];
+      return {
+        content: [{ type: 'text' as const, text: lines.join('\n') }],
+        structuredContent: summary as unknown as Record<string, unknown>,
       };
     } catch (error) {
       return handleToolError(error);
