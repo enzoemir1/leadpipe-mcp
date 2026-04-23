@@ -1,0 +1,48 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": ["enzoemir1"],
+  "name": "leadpipe-mcp",
+  "description": "AI lead qualification engine with ICP pre-filter, 0-100 scoring, Hunter.io enrichment, and CRM export to HubSpot / Pipedrive / CSV. 10 tools, 3 resources, 3 prompts.",
+  "tools": {
+    "lead_demo_seed": {
+      "enabled": true,
+      "description": "Seed 14 demo leads across 5 archetypes (hot decision-makers, warm mid-level, cold junior, raw unenriched, disqualified) so every downstream tool returns meaningful output without Hunter/HubSpot/Pipedrive API keys."
+    },
+    "lead_qualify": {
+      "enabled": true,
+      "description": "ICP pre-enrichment filter: rejects freemail domains, filters by job-title keywords, target countries, target industries, company-size tier, domain allow/blocklist, and required tech-stack. Saves Hunter.io credits on leads that wouldn't pass anyway. auto_disqualify optionally writes status=disqualified to storage."
+    },
+    "lead_ingest": {
+      "enabled": true,
+      "description": "Add a single lead to the pipeline. Required: email. Optional: first_name, last_name, job_title, company_name, company_domain, phone, source, tags, custom_fields. Returns the stored Lead with generated UUID and status=new."
+    },
+    "lead_batch_ingest": {
+      "enabled": true,
+      "description": "Add 1-100 leads in a single call. Duplicates (by email) are skipped, not failed, so a partial batch still succeeds. Returns {ingested: Lead[], skipped: Array<{email, reason}>}."
+    },
+    "lead_enrich": {
+      "enabled": true,
+      "description": "Enrich a lead with company data (name, industry, size, country, tech stack, LinkedIn) using Hunter.io if HUNTER_API_KEY is set, otherwise a curated domain-to-industry map plus TLD/keyword heuristics. Freemail domains are flagged and skipped."
+    },
+    "lead_score": {
+      "enabled": true,
+      "description": "Calculate a qualification score 0-100 across 6 weighted dimensions (job title 25%, company size 20%, industry 20%, engagement 15%, recency 10%, custom rules 10%). Leads scoring >=60 are marked qualified. Returns score + detailed breakdown."
+    },
+    "lead_search": {
+      "enabled": true,
+      "description": "Search and filter leads with pagination. Filters: query (name/email/company), status (new/qualified/disqualified/exported), min_score, source, enriched, max_days_old. Pagination via limit (default 20, max 100) and offset."
+    },
+    "lead_export": {
+      "enabled": true,
+      "description": "Export leads to HubSpot (contact creation via private app token), Pipedrive (person creation via API token), CSV file buffer, or JSON array. Filter by min_score. Requires relevant API key env vars for CRM targets; CSV/JSON need nothing."
+    },
+    "pipeline_stats": {
+      "enabled": true,
+      "description": "Pipeline analytics: total leads, counts by status/source, average score, score distribution, qualified rate, leads today/week/month. No input required."
+    },
+    "config_scoring": {
+      "enabled": true,
+      "description": "View or update the scoring engine configuration — dimension weights, high-value job-title and industry lists, preferred company sizes, and custom rules with operator-based conditions."
+    }
+  }
+}
