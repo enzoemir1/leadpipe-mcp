@@ -31936,20 +31936,84 @@ var INDUSTRY_MAP = {
   "google.com": "technology",
   "microsoft.com": "technology",
   "apple.com": "technology",
+  "meta.com": "technology",
   "amazon.com": "ecommerce",
   "stripe.com": "fintech",
+  "paypal.com": "fintech",
+  "square.com": "fintech",
+  "plaid.com": "fintech",
   "shopify.com": "ecommerce",
+  "woocommerce.com": "ecommerce",
+  "bigcommerce.com": "ecommerce",
   "salesforce.com": "saas",
   "hubspot.com": "marketing",
+  "marketo.com": "marketing",
+  "mailchimp.com": "marketing",
   "slack.com": "saas",
   "notion.so": "saas",
+  "linear.app": "saas",
+  "asana.com": "saas",
+  "figma.com": "saas",
+  "zoom.us": "saas",
   "github.com": "technology",
+  "gitlab.com": "technology",
   "atlassian.com": "saas",
   "twilio.com": "saas",
-  "vercel.com": "technology"
+  "sendgrid.com": "saas",
+  "vercel.com": "technology",
+  "netlify.com": "technology",
+  "cloudflare.com": "technology",
+  "datadoghq.com": "saas",
+  "snowflake.com": "saas",
+  "databricks.com": "saas",
+  "anthropic.com": "technology",
+  "openai.com": "technology"
 };
+var TLD_INDUSTRY_HINTS = {
+  ai: "technology",
+  io: "technology",
+  dev: "technology",
+  tech: "technology",
+  software: "technology",
+  app: "technology",
+  cloud: "technology",
+  shop: "ecommerce",
+  store: "ecommerce",
+  market: "ecommerce",
+  bank: "fintech",
+  finance: "fintech",
+  pay: "fintech",
+  health: "healthcare",
+  care: "healthcare",
+  edu: "education",
+  university: "education",
+  legal: "legal",
+  law: "legal",
+  agency: "marketing",
+  studio: "marketing",
+  media: "media",
+  news: "media"
+};
+var NAME_KEYWORDS = [
+  [/(neural|vector|llm|gpt|tensor|\bai\b|\bml\b)/i, "technology"],
+  [/(shop|store|cart|retail|commerce)/i, "ecommerce"],
+  [/(bank|fintech|finance|capital|invest|wealth|lending|credit)/i, "fintech"],
+  [/(health|medical|clinic|pharma|\bbio\b|wellness)/i, "healthcare"],
+  [/(learn|edu|school|academy|course|teach|training)/i, "education"],
+  [/(legal|law|attorney|counsel)/i, "legal"],
+  [/(marketing|agency|studio|creative|\bbrand)/i, "marketing"],
+  [/(media|news|press|podcast|broadcast|publish)/i, "media"],
+  [/(logistics|freight|transport|supply\s*chain)/i, "logistics"],
+  [/(realty|real\s*estate|property|housing)/i, "real_estate"],
+  [/(travel|hotel|booking|flight)/i, "travel"],
+  [/(restaurant|kitchen|grocery|food\s*delivery)/i, "food_beverage"]
+];
 function extractDomain(email3) {
   return email3.split("@")[1]?.toLowerCase() ?? "";
+}
+function extractTLD(domain2) {
+  const parts = domain2.split(".");
+  return parts[parts.length - 1] ?? "";
 }
 function isFreemailDomain(domain2) {
   const freemail = [
@@ -31970,7 +32034,16 @@ function isFreemailDomain(domain2) {
   ];
   return freemail.includes(domain2);
 }
-async function fetchCompanyFromDomain(domain2) {
+function guessIndustry(domain2, companyName) {
+  const tld = extractTLD(domain2);
+  if (TLD_INDUSTRY_HINTS[tld]) return TLD_INDUSTRY_HINTS[tld];
+  const haystack = `${domain2} ${companyName ?? ""}`.toLowerCase();
+  for (const [pattern, industry] of NAME_KEYWORDS) {
+    if (pattern.test(haystack)) return industry;
+  }
+  return void 0;
+}
+async function fetchCompanyFromDomain(domain2, existing) {
   const info = { domain: domain2 };
   const hunterKey = process.env.HUNTER_API_KEY;
   if (hunterKey) {
@@ -31996,51 +32069,54 @@ async function fetchCompanyFromDomain(domain2) {
     } catch {
     }
   }
-  if (!info.name) {
+  if (!existing?.name && !info.name) {
     const parts = domain2.split(".");
     info.name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
   }
-  if (!info.industry && INDUSTRY_MAP[domain2]) {
-    info.industry = INDUSTRY_MAP[domain2];
+  if (!info.industry) {
+    info.industry = INDUSTRY_MAP[domain2] ?? guessIndustry(domain2, existing?.name ?? info.name) ?? void 0;
   }
   return info;
 }
 function estimateCompanySize(domain2) {
   const large = ["google.com", "microsoft.com", "apple.com", "amazon.com", "meta.com", "salesforce.com"];
   if (large.includes(domain2)) return "5000+";
-  const midLarge = ["stripe.com", "shopify.com", "hubspot.com", "atlassian.com", "twilio.com"];
+  const midLarge = ["stripe.com", "shopify.com", "hubspot.com", "atlassian.com", "twilio.com", "databricks.com", "snowflake.com"];
   if (midLarge.includes(domain2)) return "1001-5000";
-  const mid = ["vercel.com", "notion.so", "linear.app", "figma.com"];
+  const mid = ["vercel.com", "notion.so", "linear.app", "figma.com", "anthropic.com"];
   if (mid.includes(domain2)) return "201-500";
-  return void 0;
+  return "51-200";
 }
-async function enrichLead(leadId) {
+async function enrichLead(leadId, store) {
   if (!RE_UUID.test(leadId)) throw new ValidationError(`Invalid lead ID format: ${leadId}`);
-  const lead = await storage.getLeadById(leadId);
+  const s = store ?? storage;
+  const lead = await s.getLeadById(leadId);
   if (!lead) throw new NotFoundError("Lead", leadId);
   const domain2 = extractDomain(lead.email);
   const isFreemail = isFreemailDomain(domain2);
-  let company;
+  const existing = lead.company;
+  let fetched;
   if (isFreemail) {
-    company = lead.company ?? {
-      name: void 0,
-      domain: void 0,
-      industry: void 0
-    };
+    fetched = { domain: existing?.domain };
   } else {
-    company = await fetchCompanyFromDomain(domain2);
+    fetched = await fetchCompanyFromDomain(domain2, existing);
     const estimatedSize = estimateCompanySize(domain2);
-    if (estimatedSize && !company.size) {
-      company.size = estimatedSize;
+    if (estimatedSize && !fetched.size && !existing?.size) {
+      fetched.size = estimatedSize;
     }
   }
+  const pick2 = (userVal, heuristic) => userVal !== void 0 ? userVal : heuristic;
   const merged = {
-    ...lead.company,
-    ...Object.fromEntries(
-      Object.entries(company).filter(([_, v]) => v !== void 0)
-    )
+    name: pick2(existing?.name, fetched.name),
+    domain: pick2(existing?.domain, fetched.domain ?? (domain2 && !isFreemail ? domain2 : void 0)),
+    industry: pick2(existing?.industry, fetched.industry),
+    size: pick2(existing?.size, fetched.size),
+    country: pick2(existing?.country, fetched.country),
+    description: pick2(existing?.description, fetched.description),
+    linkedin_url: pick2(existing?.linkedin_url, fetched.linkedin_url),
+    tech_stack: pick2(existing?.tech_stack, fetched.tech_stack)
   };
-  const updated = await storage.updateLead(leadId, {
+  const updated = await s.updateLead(leadId, {
     company: merged,
     status: lead.status === "new" ? "enriched" : lead.status,
     enriched_at: (/* @__PURE__ */ new Date()).toISOString()
@@ -32252,11 +32328,12 @@ function evaluateCondition(value, operator, target) {
       return false;
   }
 }
-async function scoreLead(leadId) {
+async function scoreLead(leadId, store) {
   if (!RE_UUID2.test(leadId)) throw new ValidationError(`Invalid lead ID format: ${leadId}`);
-  const lead = await storage.getLeadById(leadId);
+  const s = store ?? storage;
+  const lead = await s.getLeadById(leadId);
   if (!lead) throw new NotFoundError("Lead", leadId);
-  const config2 = await storage.getScoringConfig();
+  const config2 = await s.getScoringConfig();
   const titleResult = scoreJobTitle(lead.job_title, config2);
   const sizeResult = scoreCompanySize(lead.company?.size, config2);
   const industryResult = scoreIndustry(lead.company?.industry, config2);
@@ -32284,7 +32361,7 @@ async function scoreLead(leadId) {
     ]
   };
   const status = total >= 60 ? "qualified" : "disqualified";
-  const updated = await storage.updateLead(leadId, {
+  const updated = await s.updateLead(leadId, {
     score: total,
     score_breakdown: breakdown,
     status,
@@ -32514,17 +32591,402 @@ async function exportLeads(input) {
   }
 }
 
+// src/services/demo-seed.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
+var LEAD_SPECS = [
+  // Hot leads — senior decision makers at target industries
+  { first: "Sarah", last: "Chen", title: "VP of Engineering", companyName: "Acme Technologies", domain: "acmetech.example", industry: "saas", size: "51-200", country: "US", source: "website_form", archetype: "hot" },
+  { first: "Marcus", last: "Weber", title: "CTO", companyName: "BlueLabs GmbH", domain: "bluelabs.example", industry: "fintech", size: "201-500", country: "DE", source: "landing_page", archetype: "hot" },
+  { first: "Priya", last: "Patel", title: "Head of Growth", companyName: "Zenith AI", domain: "zenithai.example", industry: "technology", size: "11-50", country: "US", source: "webhook", archetype: "hot" },
+  { first: "Diego", last: "Martinez", title: "CEO", companyName: "Peak Consulting", domain: "peakconsulting.example", industry: "consulting", size: "11-50", country: "ES", source: "website_form", archetype: "hot" },
+  // Warm leads — good fit, mid-level
+  { first: "Olivia", last: "Thompson", title: "Marketing Director", companyName: "Nova Studio", domain: "novastudio.example", industry: "marketing", size: "51-200", country: "GB", source: "api", archetype: "warm" },
+  { first: "Lucas", last: "Janssen", title: "Product Manager", companyName: "Northwave BV", domain: "northwave.example", industry: "ecommerce", size: "201-500", country: "NL", source: "csv_import", archetype: "warm" },
+  { first: "Amelie", last: "Dubois", title: "Sales Manager", companyName: "Atelier Dubois", domain: "atelierd.example", industry: "software", size: "11-50", country: "FR", source: "landing_page", archetype: "warm" },
+  { first: "Tom", last: "Hargreaves", title: "Operations Manager", companyName: "Stonebridge Ltd", domain: "stonebridge.example", industry: "consulting", size: "51-200", country: "GB", source: "website_form", archetype: "warm" },
+  // Cold leads — lower authority, smaller companies
+  { first: "Emma", last: "Larsson", title: "Junior Analyst", companyName: "Sparkline Inc", domain: "sparkline.example", industry: "marketing", size: "1-10", country: "US", source: "csv_import", archetype: "cold" },
+  { first: "Ravi", last: "Kumar", title: "Intern", companyName: "Beacon Tech", domain: "beacontech.example", industry: "technology", size: "1-10", country: "US", source: "manual", archetype: "cold" },
+  { first: "Sofia", last: "Rossi", title: "Coordinator", companyName: "Milano Design", domain: "milanodesign.example", industry: "design", size: "11-50", country: "IT", source: "api", archetype: "cold" },
+  // Raw leads — no enrichment yet
+  { first: "Alex", last: "Kim", title: "", companyName: "", domain: "unknown.example", industry: "", size: "1-10", country: "", source: "website_form", archetype: "raw" },
+  { first: "Jordan", last: "Reyes", title: "", companyName: "", domain: "freemail.example", industry: "", size: "1-10", country: "", source: "landing_page", archetype: "raw" },
+  // Disqualified — competitor / personal email pattern
+  { first: "Pat", last: "Competitor", title: "Researcher", companyName: "RivalCorp", domain: "rivalcorp.example", industry: "saas", size: "5000+", country: "US", source: "website_form", archetype: "disqualified" }
+];
+function scoreForArchetype(a) {
+  switch (a) {
+    case "hot":
+      return { score: 88, status: "qualified" };
+    case "warm":
+      return { score: 68, status: "scored" };
+    case "cold":
+      return { score: 32, status: "scored" };
+    case "raw":
+      return { score: null, status: "new" };
+    case "disqualified":
+      return { score: 15, status: "disqualified" };
+  }
+}
+async function seedDemoLeads(store) {
+  const s = store ?? storage;
+  const now = /* @__PURE__ */ new Date();
+  const nowMs = now.getTime();
+  const leads = [];
+  let qualified = 0, scored = 0, newCount = 0, disqualified = 0;
+  let scoreSum = 0, scoreN = 0;
+  for (let i = 0; i < LEAD_SPECS.length; i++) {
+    const spec = LEAD_SPECS[i];
+    const { score, status } = scoreForArchetype(spec.archetype);
+    const ageDays = 2 + i * 4 % 58;
+    const createdAt = new Date(nowMs - ageDays * 864e5);
+    const enrichedAt = spec.archetype === "raw" ? null : new Date(createdAt.getTime() + 36e5);
+    const scoredAt = score != null ? new Date((enrichedAt ?? createdAt).getTime() + 6e4) : null;
+    const hasCompany = spec.archetype !== "raw" && spec.companyName !== "";
+    const company = hasCompany ? {
+      name: spec.companyName,
+      domain: spec.domain,
+      industry: spec.industry,
+      size: spec.size,
+      country: spec.country,
+      description: `${spec.companyName} \u2014 ${spec.industry} company, ${spec.size} employees.`,
+      linkedin_url: `https://linkedin.com/company/${spec.domain.replace(/\./g, "-")}`,
+      tech_stack: spec.industry === "saas" || spec.industry === "technology" ? ["TypeScript", "Node.js", "React", "PostgreSQL"] : spec.industry === "fintech" ? ["Python", "Go", "Kubernetes", "Redis"] : ["JavaScript", "WordPress"]
+    } : void 0;
+    const firstLower = spec.first.toLowerCase();
+    const lastLower = spec.last.toLowerCase();
+    const emailDomain = spec.domain || "example.test";
+    const email3 = `${firstLower}.${lastLower}@${emailDomain}`;
+    const lead = {
+      id: randomUUID2(),
+      email: email3,
+      first_name: spec.first,
+      last_name: spec.last,
+      full_name: `${spec.first} ${spec.last}`,
+      phone: spec.archetype === "hot" || spec.archetype === "warm" ? `+1-555-${String(1e3 + i).padStart(4, "0")}` : void 0,
+      job_title: spec.title || void 0,
+      company,
+      source: spec.source,
+      source_detail: spec.source === "landing_page" ? "/pricing" : spec.source === "website_form" ? "/contact" : void 0,
+      tags: spec.archetype === "hot" ? ["enterprise", "priority"] : spec.archetype === "warm" ? ["follow-up"] : [],
+      custom_fields: spec.archetype === "hot" ? { budget: "50k-100k", timeline: "Q2-Q3" } : {},
+      score,
+      score_breakdown: score != null ? {
+        total: score,
+        job_title_score: spec.archetype === "hot" ? 95 : spec.archetype === "warm" ? 70 : 30,
+        company_size_score: spec.size === "11-50" || spec.size === "51-200" || spec.size === "201-500" ? 85 : 40,
+        industry_score: ["saas", "fintech", "technology", "ecommerce", "marketing", "consulting"].includes(spec.industry) ? 90 : 45,
+        engagement_score: spec.archetype === "hot" ? 80 : spec.archetype === "warm" ? 55 : 25,
+        recency_score: Math.max(0, 100 - ageDays * 2),
+        custom_rules_score: 0,
+        details: [
+          { rule: "high_value_title", points: spec.archetype === "hot" ? 20 : 0, reason: `Title "${spec.title}" ${spec.archetype === "hot" ? "matches" : "does not match"} high-value list` },
+          { rule: "preferred_size", points: spec.size === "11-50" || spec.size === "51-200" || spec.size === "201-500" ? 15 : -5, reason: `Size ${spec.size}` }
+        ]
+      } : null,
+      status,
+      created_at: createdAt.toISOString(),
+      updated_at: (scoredAt ?? enrichedAt ?? createdAt).toISOString(),
+      enriched_at: enrichedAt ? enrichedAt.toISOString() : null,
+      scored_at: scoredAt ? scoredAt.toISOString() : null,
+      exported_at: null
+    };
+    leads.push(lead);
+    if (status === "qualified") qualified++;
+    else if (status === "scored") scored++;
+    else if (status === "disqualified") disqualified++;
+    else if (status === "new") newCount++;
+    if (score != null) {
+      scoreSum += score;
+      scoreN++;
+    }
+  }
+  for (const l of leads) await s.addLead(l);
+  const avgScore = scoreN > 0 ? Math.round(scoreSum / scoreN * 10) / 10 : null;
+  return {
+    leads: leads.length,
+    qualified,
+    scored,
+    new: newCount,
+    disqualified,
+    avg_score: avgScore,
+    sample_lead_ids: leads.slice(0, 5).map((l) => l.id),
+    message: `Seeded ${leads.length} leads (${qualified} qualified, ${scored} scored, ${newCount} new, ${disqualified} disqualified). Try: lead_list with status filter, or crm_export with min_score=60.`
+  };
+}
+
+// src/services/qualify.ts
+var FREEMAIL_DOMAINS = /* @__PURE__ */ new Set([
+  "gmail.com",
+  "yahoo.com",
+  "hotmail.com",
+  "outlook.com",
+  "aol.com",
+  "icloud.com",
+  "protonmail.com",
+  "mail.com",
+  "yandex.com",
+  "gmx.com",
+  "live.com",
+  "msn.com",
+  "ymail.com",
+  "rocketmail.com",
+  "zoho.com"
+]);
+var SIZE_ORDER = {
+  "1-10": 0,
+  "11-50": 1,
+  "51-200": 2,
+  "201-500": 3,
+  "501-1000": 4,
+  "1001-5000": 5,
+  "5000+": 6
+};
+function extractDomain2(email3) {
+  if (!email3) return null;
+  const at = email3.indexOf("@");
+  if (at < 0) return null;
+  return email3.slice(at + 1).toLowerCase().trim() || null;
+}
+function includesAny(haystack, needles) {
+  if (!needles || needles.length === 0) return false;
+  const h = haystack.toLowerCase();
+  return needles.some((n) => h.includes(n.toLowerCase()));
+}
+function evaluateLead(lead, criteria) {
+  const reasons = [];
+  let qualified = true;
+  const domain2 = extractDomain2(lead.email);
+  const isFreemail = domain2 ? FREEMAIL_DOMAINS.has(domain2) : false;
+  const industry = lead.company?.industry ?? null;
+  const size = lead.company?.size ?? null;
+  const country = lead.company?.country ?? null;
+  const techStack = lead.company?.tech_stack ?? [];
+  if (criteria.reject_freemail && isFreemail) {
+    qualified = false;
+    reasons.push(`Rejected: freemail domain (${domain2}) \u2014 not a business email.`);
+  }
+  if (criteria.required_title_keywords && criteria.required_title_keywords.length > 0) {
+    const title = lead.job_title ?? "";
+    if (!includesAny(title, criteria.required_title_keywords)) {
+      qualified = false;
+      reasons.push(`Rejected: job_title "${title || "(empty)"}" missing any of [${criteria.required_title_keywords.join(", ")}].`);
+    }
+  }
+  if (criteria.exclude_title_keywords && criteria.exclude_title_keywords.length > 0) {
+    const title = lead.job_title ?? "";
+    if (includesAny(title, criteria.exclude_title_keywords)) {
+      qualified = false;
+      reasons.push(`Rejected: job_title contains excluded keyword.`);
+    }
+  }
+  if (criteria.target_countries && criteria.target_countries.length > 0) {
+    const countryUpper = (country ?? "").toUpperCase();
+    const targets = criteria.target_countries.map((c) => c.toUpperCase());
+    if (!countryUpper || !targets.includes(countryUpper)) {
+      qualified = false;
+      reasons.push(`Rejected: country "${country ?? "(unknown)"}" not in target list [${targets.join(", ")}].`);
+    }
+  }
+  if (criteria.target_industries && criteria.target_industries.length > 0) {
+    if (!industry || !includesAny(industry, criteria.target_industries)) {
+      qualified = false;
+      reasons.push(`Rejected: industry "${industry ?? "(unknown)"}" not in target list.`);
+    }
+  }
+  if (criteria.min_company_size && size) {
+    const min = SIZE_ORDER[criteria.min_company_size];
+    const actual = SIZE_ORDER[size];
+    if (actual !== void 0 && actual < min) {
+      qualified = false;
+      reasons.push(`Rejected: company size ${size} below minimum ${criteria.min_company_size}.`);
+    }
+  }
+  if (criteria.domain_blocklist && domain2) {
+    const blocked = criteria.domain_blocklist.some((d) => domain2 === d.toLowerCase() || domain2.endsWith(`.${d.toLowerCase()}`));
+    if (blocked) {
+      qualified = false;
+      reasons.push(`Rejected: domain ${domain2} is blocklisted.`);
+    }
+  }
+  if (criteria.domain_allowlist && criteria.domain_allowlist.length > 0) {
+    const allowed = domain2 && criteria.domain_allowlist.some((d) => domain2 === d.toLowerCase() || domain2.endsWith(`.${d.toLowerCase()}`));
+    if (!allowed) {
+      qualified = false;
+      reasons.push(`Rejected: domain ${domain2 ?? "(none)"} not in allowlist.`);
+    }
+  }
+  if (criteria.required_tech_stack && criteria.required_tech_stack.length > 0) {
+    const stackLower = techStack.map((t) => t.toLowerCase());
+    const hasAny = criteria.required_tech_stack.some((t) => stackLower.includes(t.toLowerCase()));
+    if (!hasAny) {
+      qualified = false;
+      reasons.push(`Rejected: tech_stack [${techStack.join(", ") || "(empty)"}] missing any of required [${criteria.required_tech_stack.join(", ")}]. Consider chaining with a platform-detection tool if tech_stack is empty.`);
+    }
+  }
+  if (qualified && reasons.length === 0) {
+    reasons.push("Passed: all configured ICP criteria matched.");
+  }
+  return {
+    lead_id: lead.id,
+    email: lead.email,
+    qualified,
+    reasons,
+    signals: {
+      is_freemail: isFreemail,
+      domain: domain2,
+      industry_hint: industry,
+      company_size: size,
+      country
+    }
+  };
+}
+async function qualifyLeads(options, store) {
+  const s = store ?? storage;
+  if (!options.criteria || Object.keys(options.criteria).length === 0) {
+    throw new ValidationError("At least one qualification criterion must be provided.");
+  }
+  let leads;
+  if (options.lead_ids && options.lead_ids.length > 0) {
+    leads = [];
+    for (const id of options.lead_ids) {
+      const lead = await s.getLeadById(id);
+      if (!lead) {
+        throw new NotFoundError("Lead", id);
+      }
+      leads.push(lead);
+    }
+  } else {
+    const all = await s.getAllLeads();
+    leads = all.filter((l) => l.status === "new");
+  }
+  const results = leads.map((lead) => evaluateLead(lead, options.criteria));
+  let autoDisqualified = 0;
+  if (options.auto_disqualify) {
+    for (const r of results) {
+      if (!r.qualified) {
+        const lead = leads.find((l) => l.id === r.lead_id);
+        const prevFields = lead?.custom_fields ?? {};
+        await s.updateLead(r.lead_id, {
+          status: "disqualified",
+          custom_fields: {
+            ...prevFields,
+            disqualification_reason: r.reasons.join(" | "),
+            disqualified_by: "lead_qualify",
+            disqualified_at: (/* @__PURE__ */ new Date()).toISOString()
+          }
+        });
+        autoDisqualified++;
+      }
+    }
+  }
+  const qualifiedCount = results.filter((r) => r.qualified).length;
+  const rejectedCount = results.length - qualifiedCount;
+  return {
+    evaluated: results.length,
+    qualified: qualifiedCount,
+    rejected: rejectedCount,
+    auto_disqualified: autoDisqualified,
+    results,
+    cost_savings_estimate: {
+      enrichment_calls_avoided: rejectedCount,
+      note: `Each rejected lead would have consumed 1 Hunter.io credit (~$0.01) during enrichment. Rejected ${rejectedCount} leads saves ~$${(rejectedCount * 0.01).toFixed(2)}.`
+    }
+  };
+}
+
 // src/index.ts
+var SERVER_VERSION = "1.4.0";
 var server = new McpServer({
   name: "leadpipe-mcp",
-  version: "1.0.0"
+  version: SERVER_VERSION
 });
+server.registerTool(
+  "lead_demo_seed",
+  {
+    title: "Seed Demo Leads",
+    description: "Populate the pipeline with a realistic demo dataset: 14 leads across 5 archetypes (hot decision-makers, warm mid-level, cold junior/small-co, raw unenriched, and disqualified). Each lead has appropriate enrichment state, scoring breakdown, and status, so every downstream tool \u2014 lead_list, lead_search, lead_score, crm_export, and the pipeline-overview resource \u2014 returns meaningful output immediately. Use this to evaluate LeadPipe via MCP Inspector without Hunter, HubSpot, or Pipedrive API keys. Safe to call multiple times; each call appends a fresh batch with new UUIDs. Returns counts by status plus sample_lead_ids you can feed into lead_enrich, lead_score, or crm_export.",
+    inputSchema: external_exports3.object({}),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+  },
+  async () => {
+    try {
+      const result = await seedDemoLeads();
+      const lines = [
+        `Seeded ${result.leads} demo leads:`,
+        `  Qualified: ${result.qualified}`,
+        `  Scored: ${result.scored}`,
+        `  New (unscored): ${result.new}`,
+        `  Disqualified: ${result.disqualified}`,
+        `  Avg score: ${result.avg_score ?? "n/a"}`,
+        ``,
+        `Sample lead ids (use with lead_enrich, lead_score):`,
+        ...result.sample_lead_ids.map((id) => `  - ${id}`)
+      ];
+      return {
+        content: [{ type: "text", text: lines.join("\n") }],
+        structuredContent: result
+      };
+    } catch (error48) {
+      return handleToolError(error48);
+    }
+  }
+);
+var QualificationCriteriaSchema = external_exports3.object({
+  reject_freemail: external_exports3.boolean().optional().describe("Reject gmail/yahoo/outlook/etc. \u2014 non-business emails."),
+  required_title_keywords: external_exports3.array(external_exports3.string()).optional().describe(`Case-insensitive substrings a lead's job_title must contain (any match passes). E.g. ["vp", "director", "head"].`),
+  exclude_title_keywords: external_exports3.array(external_exports3.string()).optional().describe("Case-insensitive substrings that disqualify if present in job_title."),
+  target_countries: external_exports3.array(external_exports3.string()).optional().describe('ISO 3166-1 alpha-2 country codes to target. E.g. ["US", "CA", "GB"].'),
+  target_industries: external_exports3.array(external_exports3.string()).optional().describe('Industries the company must belong to (case-insensitive). E.g. ["saas", "fintech"].'),
+  min_company_size: external_exports3.enum(["1-10", "11-50", "51-200", "201-500", "501-1000", "1001-5000", "5000+"]).optional().describe("Reject leads below this company-size tier."),
+  domain_allowlist: external_exports3.array(external_exports3.string()).optional().describe('Only accept these domains (full domain or suffix match). E.g. ["acme.com", "stripe.com"].'),
+  domain_blocklist: external_exports3.array(external_exports3.string()).optional().describe('Reject these domains. E.g. ["competitor.com"].'),
+  required_tech_stack: external_exports3.array(external_exports3.string()).optional().describe('Tech-stack tokens the company.tech_stack must include. Useful when chained after a platform-detection tool (e.g. Detecto). E.g. ["shopify", "stripe"].')
+});
+server.registerTool(
+  "lead_qualify",
+  {
+    title: "ICP Pre-Qualification (Pre-Enrichment Filter)",
+    description: `Filter leads against your Ideal Customer Profile BEFORE spending enrichment credits. Uses only locally-available signals (email domain, job_title, country, industry hints, tech_stack) so nothing is charged to Hunter.io, HubSpot, Pipedrive, or any other external service. Set auto_disqualify=true to also update rejected leads to status="disqualified" with the reject reasons stored in custom_fields. If lead_ids is omitted, evaluates every lead currently in status="new". Pairs naturally with upstream platform-detection tools (e.g. Detecto's detect_platform) \u2014 run that first to populate company.tech_stack, then run lead_qualify with required_tech_stack=["shopify"] to drop wrong-platform leads before they cost a single API call. Returns qualified/rejected counts, per-lead reasons, and an estimated credit savings figure.`,
+    inputSchema: external_exports3.object({
+      lead_ids: external_exports3.array(external_exports3.string().uuid()).optional().describe('Specific lead IDs to evaluate. If omitted, evaluates all leads with status="new".'),
+      criteria: QualificationCriteriaSchema.describe("At least one criterion is required. All provided criteria must pass for a lead to qualify."),
+      auto_disqualify: external_exports3.boolean().default(false).describe('If true, rejected leads have status set to "disqualified" and reasons stored in custom_fields. If false (default), just returns the evaluation without mutating storage.')
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  },
+  async ({ lead_ids, criteria, auto_disqualify }) => {
+    try {
+      const summary = await qualifyLeads({
+        lead_ids,
+        criteria,
+        auto_disqualify
+      });
+      const lines = [
+        `ICP qualification run:`,
+        `  Evaluated: ${summary.evaluated}`,
+        `  Qualified: ${summary.qualified}`,
+        `  Rejected:  ${summary.rejected}`,
+        `  Auto-disqualified in storage: ${summary.auto_disqualified}`,
+        ``,
+        `Cost savings: ${summary.cost_savings_estimate.note}`
+      ];
+      return {
+        content: [{ type: "text", text: lines.join("\n") }],
+        structuredContent: summary
+      };
+    } catch (error48) {
+      return handleToolError(error48);
+    }
+  }
+);
 server.registerTool(
   "lead_ingest",
   {
     title: "Ingest Lead",
-    description: "Add a new lead to the pipeline. Provide email (required) and optional fields like name, job title, company. Duplicate emails are rejected.",
-    inputSchema: LeadIngestInputSchema
+    description: 'Add a single lead to the pipeline. Required: email. Optional: first_name, last_name, job_title, company_name, phone, source ("website"|"linkedin"|"referral"|"event"|"cold_outreach"|"partner"|"other"), tags (string array), custom_fields. Returns the stored lead object with a generated UUID, initial status="new", created_at, and a null score (run lead_score to populate). Throws a duplicate error if the email is already in the pipeline \u2014 use lead_search first if you need upsert behaviour.',
+    inputSchema: LeadIngestInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   async (input) => {
     try {
@@ -32547,8 +33009,9 @@ server.registerTool(
   "lead_batch_ingest",
   {
     title: "Batch Ingest Leads",
-    description: "Add multiple leads at once (1-100). Returns count of ingested and skipped (duplicates).",
-    inputSchema: LeadBatchIngestInputSchema
+    description: "Add 1 to 100 leads in a single call. Each lead uses the same schema as lead_ingest. Returns {ingested: Lead[], skipped: Array<{email, reason}>} \u2014 duplicates are skipped (not failed) so a partial batch still succeeds. Prefer this over repeated lead_ingest calls for bulk imports (CSV/webhook drops).",
+    inputSchema: LeadBatchIngestInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   async (input) => {
     try {
@@ -32567,10 +33030,11 @@ server.registerTool(
   "lead_enrich",
   {
     title: "Enrich Lead",
-    description: "Enrich a lead with company data (industry, size, country, tech stack) using the email domain. Provide the lead ID.",
+    description: "Derive and attach company data to an existing lead using the email domain: company name, industry, size, country, website, estimated headcount, and common tech stack. Does not call external APIs \u2014 enrichment is driven by the built-in domain knowledge base. Updates the lead in place and returns the enriched record, ready for lead_score. Run this before lead_score for the best qualification accuracy.",
     inputSchema: external_exports3.object({
-      lead_id: external_exports3.string().describe("The lead ID to enrich")
-    })
+      lead_id: external_exports3.string().uuid().describe("UUID of the lead to enrich (returned by lead_ingest or lead_search)")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   async ({ lead_id }) => {
     try {
@@ -32593,10 +33057,11 @@ server.registerTool(
   "lead_score",
   {
     title: "Score Lead",
-    description: "Calculate an AI-powered qualification score (0-100) for a lead based on job title, company size, industry, and custom rules. Updates the lead status to qualified (>=60) or disqualified (<60).",
+    description: 'Compute a 6-dimensional qualification score (0-100) for a lead: job_title, company_size, industry, engagement, recency, and custom_rules. Each dimension is weighted via config_scoring; the final score is their weighted average. Updates the lead status to "qualified" (\u226560) or "disqualified" (<60) and stores score_breakdown alongside the total. Returns the updated lead with the breakdown. Run lead_enrich first for the most accurate industry/size signals.',
     inputSchema: external_exports3.object({
-      lead_id: external_exports3.string().describe("The lead ID to score")
-    })
+      lead_id: external_exports3.string().uuid().describe("UUID of the lead to score")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   async ({ lead_id }) => {
     try {
@@ -32630,8 +33095,9 @@ server.registerTool(
   "lead_search",
   {
     title: "Search Leads",
-    description: "Search and filter leads by text query, status, score range, source, or tags. Supports pagination.",
-    inputSchema: LeadSearchInputSchema
+    description: 'Search and filter the lead pipeline. Optional filters: query (free-text over name/email/company), status ("new"|"qualified"|"disqualified"|"contacted"|"converted"), min_score, max_score, source, tags (array), date_from/date_to. Pagination via limit (default 50, max 200) and offset. Returns {total, leads[]}. Use this to drive exports, targeted scoring, and dashboards.',
+    inputSchema: LeadSearchInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   async (input) => {
     try {
@@ -32651,8 +33117,9 @@ server.registerTool(
   "lead_export",
   {
     title: "Export Leads",
-    description: "Export leads to HubSpot, Pipedrive, Google Sheets, CSV, or JSON. Optionally filter by lead IDs or minimum score.",
-    inputSchema: LeadExportInputSchema
+    description: 'Push leads to an external destination. target must be one of "hubspot", "pipedrive", "google_sheets", "csv", or "json". For CRM targets (hubspot, pipedrive) the respective API key env var must be set (HUBSPOT_API_KEY, PIPEDRIVE_API_TOKEN) \u2014 if missing, the tool returns a dry-run payload instead of erroring. Filter the export via lead_ids (explicit list) or min_score (everything above threshold). Returns {target, count, summary, errors?}.',
+    inputSchema: LeadExportInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   async (input) => {
     try {
@@ -32670,8 +33137,9 @@ server.registerTool(
   "pipeline_stats",
   {
     title: "Pipeline Statistics",
-    description: "Get lead pipeline analytics: total leads, status/source breakdown, average score, score distribution, conversion rates.",
-    inputSchema: external_exports3.object({})
+    description: "Portfolio-wide pipeline analytics across all leads. Returns {total_leads, leads_today, leads_this_week, leads_this_month, avg_score, qualified_rate (percent), by_status (counts per status), by_source (counts per source), score_distribution}. Takes no input \u2014 always aggregates the full dataset. Ideal for dashboards, stand-ups, and conversion-rate tracking.",
+    inputSchema: external_exports3.object({}),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   async () => {
     try {
@@ -32699,7 +33167,7 @@ server.registerTool(
   "config_scoring",
   {
     title: "Scoring Configuration",
-    description: "View or update the lead scoring configuration. Pass empty object to view current config. Pass fields to update weights, titles, industries, or custom rules.",
+    description: "View or update the global lead scoring configuration used by lead_score. Call with no fields (empty object) to fetch the current config. Pass any subset of fields to patch-update: six dimension weights (each 0\u20131, should sum to ~1 but not enforced), high_value_titles (string array), high_value_industries (string array), preferred_company_sizes, and custom_rules (array of {name, condition, points}). Changes apply to future lead_score calls only \u2014 previously scored leads keep their scores until re-scored.",
     inputSchema: external_exports3.object({
       job_title_weight: external_exports3.number().min(0).max(1).optional(),
       company_size_weight: external_exports3.number().min(0).max(1).optional(),
@@ -32711,7 +33179,8 @@ server.registerTool(
       high_value_industries: external_exports3.array(external_exports3.string()).optional(),
       preferred_company_sizes: external_exports3.array(CompanySizeSchema).optional(),
       custom_rules: external_exports3.array(CustomRuleSchema).optional()
-    })
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
   async (input) => {
     try {
@@ -32799,6 +33268,36 @@ server.registerResource(
     };
   }
 );
+server.registerPrompt(
+  "lead_qualification",
+  { title: "Lead Qualification Review", description: "Guide through reviewing and qualifying a batch of new leads. Helps prioritize which leads to focus on based on scoring and enrichment data." },
+  async () => ({
+    messages: [{
+      role: "assistant",
+      content: { type: "text", text: "I'll help you review and qualify your leads. Let me start by checking your pipeline.\n\n1. First, I'll use `lead_search` to find unscored leads\n2. Then `lead_score` each one to get AI qualification scores\n3. Finally, I'll summarize the top prospects for your review\n\nWould you like me to start with all new leads, or filter by a specific source or tag?" }
+    }]
+  })
+);
+server.registerPrompt(
+  "pipeline_review",
+  { title: "Pipeline Health Review", description: "Comprehensive review of your lead pipeline health \u2014 conversion rates, score distribution, source effectiveness, and actionable recommendations." },
+  async () => ({
+    messages: [{
+      role: "assistant",
+      content: { type: "text", text: "Let me run a complete pipeline health check.\n\n1. I'll use `pipeline_stats` to get current metrics\n2. Review score distribution and conversion rates\n3. Identify your best-performing lead sources\n4. Provide recommendations to improve qualification rates\n\nShall I proceed with the full analysis?" }
+    }]
+  })
+);
+server.registerPrompt(
+  "crm_export",
+  { title: "CRM Export Workflow", description: "Guide through exporting qualified leads to your CRM \u2014 select criteria, choose target, and execute the export." },
+  async () => ({
+    messages: [{
+      role: "assistant",
+      content: { type: "text", text: "I'll help you export leads to your CRM.\n\n1. First, let's define criteria \u2014 minimum score, status, or tags\n2. I'll preview the leads that match\n3. Choose your target: HubSpot, Pipedrive, CSV, or JSON\n4. Execute the export\n\nWhich CRM would you like to export to?" }
+    }]
+  })
+);
 var _sandboxMode = false;
 function createSandboxServer() {
   _sandboxMode = true;
@@ -32811,7 +33310,7 @@ async function main() {
     const httpServer = createServer(async (req, res) => {
       if (req.method === "GET" && req.url === "/health") {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ status: "ok", version: "1.0.0" }));
+        res.end(JSON.stringify({ status: "ok", server: "leadpipe-mcp", version: SERVER_VERSION }));
         return;
       }
       if ((req.method === "POST" || req.method === "GET" || req.method === "DELETE") && req.url === "/mcp") {
@@ -32836,12 +33335,12 @@ async function main() {
       res.end("Not Found");
     });
     httpServer.listen(port, () => {
-      console.error(`LeadPipe MCP Server v1.0.0 running on HTTP port ${port}`);
+      console.error(`LeadPipe MCP Server v${SERVER_VERSION} running on HTTP port ${port}`);
     });
   } else {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("LeadPipe MCP Server v1.0.0 running on stdio");
+    console.error(`LeadPipe MCP Server v${SERVER_VERSION} running on stdio`);
   }
 }
 setTimeout(() => {

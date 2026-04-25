@@ -20,7 +20,7 @@ import { qualifyLeads, type QualificationCriteria } from './services/qualify.js'
 import { storage } from './services/storage.js';
 import { handleToolError } from './utils/errors.js';
 
-const SERVER_VERSION = '1.4.0';
+const SERVER_VERSION = '1.4.1';
 
 const server = new McpServer({
   name: 'leadpipe-mcp',
@@ -324,16 +324,16 @@ server.registerTool(
     description:
       'View or update the global lead scoring configuration used by lead_score. Call with no fields (empty object) to fetch the current config. Pass any subset of fields to patch-update: six dimension weights (each 0–1, should sum to ~1 but not enforced), high_value_titles (string array), high_value_industries (string array), preferred_company_sizes, and custom_rules (array of {name, condition, points}). Changes apply to future lead_score calls only — previously scored leads keep their scores until re-scored.',
     inputSchema: z.object({
-      job_title_weight: z.number().min(0).max(1).optional(),
-      company_size_weight: z.number().min(0).max(1).optional(),
-      industry_weight: z.number().min(0).max(1).optional(),
-      engagement_weight: z.number().min(0).max(1).optional(),
-      recency_weight: z.number().min(0).max(1).optional(),
-      custom_rules_weight: z.number().min(0).max(1).optional(),
-      high_value_titles: z.array(z.string()).optional(),
-      high_value_industries: z.array(z.string()).optional(),
-      preferred_company_sizes: z.array(CompanySizeSchema).optional(),
-      custom_rules: z.array(CustomRuleSchema).optional(),
+      job_title_weight: z.number().min(0).max(1).optional().describe('Weight for the job_title dimension (0–1). Default 0.25. The six weights should sum to ~1 but it is not strictly enforced.'),
+      company_size_weight: z.number().min(0).max(1).optional().describe('Weight for the company_size dimension (0–1). Default 0.20.'),
+      industry_weight: z.number().min(0).max(1).optional().describe('Weight for the industry dimension (0–1). Default 0.20.'),
+      engagement_weight: z.number().min(0).max(1).optional().describe('Weight for the engagement dimension (0–1). Default 0.15.'),
+      recency_weight: z.number().min(0).max(1).optional().describe('Weight for the recency dimension (0–1). Default 0.10. Recently created leads score higher.'),
+      custom_rules_weight: z.number().min(0).max(1).optional().describe('Weight for the custom_rules dimension (0–1). Default 0.10.'),
+      high_value_titles: z.array(z.string()).optional().describe('Lowercase substrings that mark a job_title as high-value. Defaults: ["ceo", "cto", "vp", "director", "head", "founder", "owner", "manager"]. Match is case-insensitive substring.'),
+      high_value_industries: z.array(z.string()).optional().describe('Lowercase substrings that mark a company industry as high-value. Defaults: ["saas", "technology", "software", "fintech", "ecommerce", "marketing", "consulting"].'),
+      preferred_company_sizes: z.array(CompanySizeSchema).optional().describe('Company size tiers earning the maximum company_size_score. Defaults: ["11-50", "51-200", "201-500"].'),
+      custom_rules: z.array(CustomRuleSchema).optional().describe('Array of custom scoring rules. Each rule is {field, operator, value, points (-50..+50), description}. Replaces the existing rule list when provided.'),
     }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
