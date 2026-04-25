@@ -18,9 +18,19 @@ import { exportLeads } from './services/crm/exporter.js';
 import { seedDemoLeads } from './services/demo-seed.js';
 import { qualifyLeads, type QualificationCriteria } from './services/qualify.js';
 import { storage } from './services/storage.js';
+import { ensureProOrReject, type LicenseConfig } from './services/license.js';
 import { handleToolError } from './utils/errors.js';
+import { homedir } from 'node:os';
+import { join as pathJoin } from 'node:path';
 
 const SERVER_VERSION = '1.4.1';
+
+const LICENSE_CONFIG: LicenseConfig = {
+  productId: 1004785,
+  bundleProductId: 1004800,
+  cacheDir: pathJoin(homedir(), '.config', 'leadpipe-mcp'),
+  buyUrl: 'https://automatiabcn.lemonsqueezy.com/buy/360565a3-2577-45e2-93dd-1548a881f456',
+};
 
 const server = new McpServer({
   name: 'leadpipe-mcp',
@@ -88,6 +98,8 @@ server.registerTool(
   },
   async ({ lead_ids, criteria, auto_disqualify }) => {
     try {
+      const reject = await ensureProOrReject(LICENSE_CONFIG, 'lead_qualify');
+      if (reject) return reject;
       const summary = await qualifyLeads({
         lead_ids,
         criteria: criteria as QualificationCriteria,
@@ -178,6 +190,8 @@ server.registerTool(
   },
   async ({ lead_id }) => {
     try {
+      const reject = await ensureProOrReject(LICENSE_CONFIG, 'lead_enrich');
+      if (reject) return reject;
       const lead = await enrichLead(lead_id);
       return {
         content: [
@@ -272,6 +286,8 @@ server.registerTool(
   },
   async (input) => {
     try {
+      const reject = await ensureProOrReject(LICENSE_CONFIG, 'lead_export');
+      if (reject) return reject;
       const result = await exportLeads(input);
       return {
         content: [{ type: 'text' as const, text: result.summary }],
@@ -295,6 +311,8 @@ server.registerTool(
   },
   async () => {
     try {
+      const reject = await ensureProOrReject(LICENSE_CONFIG, 'pipeline_stats');
+      if (reject) return reject;
       const stats = await storage.getStats();
       const lines = [
         'Pipeline Stats',

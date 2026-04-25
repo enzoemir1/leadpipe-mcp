@@ -272,6 +272,43 @@ npm run inspect    # Open MCP Inspector
 
 ---
 
+## Pro License
+
+LeadPipe ships in **Free mode** — `lead_demo_seed`, `lead_ingest`, `lead_batch_ingest`, `lead_search`, `lead_score`, and `config_scoring` are open. The following tools require a **Pro license**:
+
+- `lead_qualify` — ICP pre-filter
+- `lead_enrich` — domain knowledge-base enrichment
+- `lead_export` — HubSpot / Pipedrive / Google Sheets / CSV / JSON
+- `pipeline_stats` — portfolio analytics
+
+**Buy a Pro License (€19, lifetime, 3 machines):** https://automatiabcn.lemonsqueezy.com/buy/360565a3-2577-45e2-93dd-1548a881f456
+
+Or get the **[Indie MCP Stack Bundle](https://automatiabcn.lemonsqueezy.com/buy/55e932fd-8319-47f0-8e95-0b86a29f2617)** (€69, all 4 servers).
+
+Then activate by setting the env var:
+
+```bash
+export LEMONSQUEEZY_LICENSE_KEY=YOUR-KEY-HERE
+```
+
+Or in your Claude Desktop / MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "leadpipe-mcp": {
+      "command": "npx",
+      "args": ["-y", "leadpipe-mcp-server"],
+      "env": { "LEMONSQUEEZY_LICENSE_KEY": "YOUR-KEY-HERE" }
+    }
+  }
+}
+```
+
+Validation is cached locally for 24 h, so the server is fully offline-capable after the first run.
+
+---
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
